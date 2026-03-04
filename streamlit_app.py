@@ -1,3 +1,4 @@
+
 import os
 import streamlit as st
 import numpy as np
@@ -8,12 +9,9 @@ import gdown
 st.set_page_config(page_title="FruitScan", page_icon="🍊", layout="centered", initial_sidebar_state="expanded")
 
 MODELOS_DRIVE = {
-    "MobileNetV2_finetuned": "1HUduen1mR02tBU5Qqshd_uBr0gUzqXSy",
-   
-    "InceptionV3_finetuned": "1C9Ny3ZTKWZi24OqgLD9eal0rqz49mf57",
-   
-    "VGG16_finetuned":       "1-nBisjMKqhFPcccpI6bA9wy3uO--F6ln",
-    
+    "InceptionV3": "1BYrUWEhK_4NtXY_SKH2mpKTJ_uusHYOT",
+    "MobileNetV2": "1MGM1f8c46f07j1K_UUllfoplhjCBhQCp",
+    "VGG16":       "1g7EhijZb7zL_VxwEPYeJ54Sny-bhII1m",
 }
 
 CLASES_FRUTA  = ["Banano", "Fresa", "Limón", "Lulo", "Mango", "Naranja", "Tomate", "Tomate de Árbol"]
@@ -24,27 +22,38 @@ MODELOS_DIR = "/tmp/modelos"
 os.makedirs(MODELOS_DIR, exist_ok=True)
 
 def descargar_modelo(nombre, file_id):
-    ruta = os.path.join(MODELOS_DIR, f"{nombre}.h5")
+    ruta = os.path.join(MODELOS_DIR, f"{nombre}.tflite")
     if not os.path.exists(ruta):
-        st.info(f"⬇️ Descargando {nombre}... esto puede tardar un momento.")
         url = f"https://drive.google.com/uc?id={file_id}"
         gdown.download(url, ruta, quiet=False)
     return ruta
 
-@st.cache_resource(show_spinner="Cargando modelo...")
+@st.cache_resource(show_spinner="Descargando y cargando modelo...")
 def cargar_modelo(nombre):
     ruta = descargar_modelo(nombre, MODELOS_DRIVE[nombre])
-    return tf.keras.models.load_model(ruta, compile=False)
+    interpreter = tf.lite.Interpreter(model_path=ruta)
+    interpreter.allocate_tensors()
+    return interpreter
 
-def preprocesar(imagen):
+def predecir(interpreter, imagen):
     img = imagen.convert("RGB").resize((224, 224))
     arr = np.array(img, dtype=np.float32) / 255.0
-    return np.expand_dims(arr, axis=0)
+    arr = np.expand_dims(arr, axis=0)
+
+    input_details  = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
+
+    interpreter.set_tensor(input_details[0]['index'], arr)
+    interpreter.invoke()
+
+    # Obtener las dos salidas
+    salidas = [interpreter.get_tensor(o['index'])[0] for o in output_details]
+    return salidas[0], salidas[1]
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### ⚙️ Configuración")
-    nombre_modelo = st.selectbox("Modelo", list(MODELOS_DRIVE.keys()), index=2)
+    nombre_modelo = st.selectbox("Modelo", list(MODELOS_DRIVE.keys()), index=0)
     st.markdown("---")
     st.markdown("**Frutas soportadas**")
     for f in CLASES_FRUTA:
@@ -53,7 +62,7 @@ with st.sidebar:
 # ── Header ─────────────────────────────────────────────────────────────────────
 st.title("🍊 FruitScan")
 st.caption("Clasificador multitarea — Fruta & Estado")
-st.warning("⚠️ La primera predicción tarda 1-2 minutos mientras se descarga y carga el modelo.")
+st.info("ℹ️ La primera predicción descarga el modelo (~10-30MB). Las siguientes son instantáneas.")
 
 # ── Upload ─────────────────────────────────────────────────────────────────────
 archivo = st.file_uploader("Sube una imagen de fruta", type=["jpg","jpeg","png","webp"])
@@ -66,29 +75,25 @@ if archivo:
     with col2:
         with st.spinner("Analizando..."):
             try:
-                modelo  = cargar_modelo(nombre_modelo)
-                entrada = preprocesar(imagen)
-                salida  = modelo.predict(entrada, verbose=0)
-                if isinstance(salida, dict):
-                    pred_fruta  = salida["salida_fruta"][0]
-                    pred_estado = salida["salida_estado"][0]
-                else:
-                    pred_fruta  = salida[0][0]
-                    pred_estado = salida[1][0]
+                interpreter = cargar_modelo(nombre_modelo)
+                pred_fruta, pred_estado = predecir(interpreter, imagen)
+
                 fruta  = CLASES_FRUTA[int(np.argmax(pred_fruta))]
                 estado = CLASES_ESTADO[int(np.argmax(pred_estado))]
                 emoji  = EMOJIS_FRUTA.get(fruta, "🍑")
                 icono  = "✅" if estado == "Fresca" else "🔴"
-                conf_f = float(pred_fruta[int(np.argmax(pred_fruta))]) * 100
-                conf_e = float(pred_estado[int(np.argmax(pred_estado))]) * 100
+                conf_f = float(np.max(pred_fruta)) * 100
+                conf_e = float(np.max(pred_estado)) * 100
+
                 st.markdown(f"## {emoji} {fruta}")
                 st.markdown(f"### {icono} {estado}")
                 st.metric("Confianza fruta",  f"{conf_f:.1f}%")
                 st.metric("Confianza estado", f"{conf_e:.1f}%")
-                st.caption(f"Modelo: {nombre_modelo}")
+                st.caption(f"Modelo: {nombre_modelo} finetuned")
             except Exception as e:
                 st.error(f"Error: {e}")
                 st.stop()
+
     st.markdown("---")
     col3, col4 = st.columns(2)
     with col3:
