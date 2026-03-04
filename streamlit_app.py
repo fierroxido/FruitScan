@@ -9,11 +9,11 @@ st.set_page_config(page_title="FruitScan", page_icon="🍊", layout="centered", 
 
 MODELOS_DRIVE = {
     "MobileNetV2_finetuned": "1HUduen1mR02tBU5Qqshd_uBr0gUzqXSy",
-    "MobileNetV2_best":      "14ZUKtsMKC7C7o_drFpy_xii6vxGYc8Oc",
+   
     "InceptionV3_finetuned": "1C9Ny3ZTKWZi24OqgLD9eal0rqz49mf57",
-    "InceptionV3_best":      "1wpcCNg7ORR09_Awq_21x-NQlKkY2IVC9",
+   
     "VGG16_finetuned":       "1-nBisjMKqhFPcccpI6bA9wy3uO--F6ln",
-    "VGG16_best":            "1J4tSIWB78tV8oFY3UJ0rWR7NDa-P_mab",
+    
 }
 
 CLASES_FRUTA  = ["Banano", "Fresa", "Limón", "Lulo", "Mango", "Naranja", "Tomate", "Tomate de Árbol"]
