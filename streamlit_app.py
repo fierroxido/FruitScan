@@ -20,15 +20,15 @@ CLASES_FRUTA  = ["Banano", "Fresa", "Limón", "Lulo", "Mango", "Naranja", "Tomat
 CLASES_ESTADO = ["Fresca", "Podrida"]
 EMOJIS_FRUTA  = {"Banano":"🍌","Fresa":"🍓","Limón":"🍋","Lulo":"🟠","Mango":"🥭","Naranja":"🍊","Tomate":"🍅","Tomate de Árbol":"🍅"}
 
-MODELOS_DIR = "modelos"
+MODELOS_DIR = "/tmp/modelos"
 os.makedirs(MODELOS_DIR, exist_ok=True)
 
 def descargar_modelo(nombre, file_id):
     ruta = os.path.join(MODELOS_DIR, f"{nombre}.h5")
     if not os.path.exists(ruta):
-        with st.spinner(f"Descargando {nombre} desde Google Drive..."):
-            url = f"https://drive.google.com/uc?id={file_id}"
-            gdown.download(url, ruta, quiet=False)
+        st.info(f"⬇️ Descargando {nombre}... esto puede tardar un momento.")
+        url = f"https://drive.google.com/uc?id={file_id}"
+        gdown.download(url, ruta, quiet=False)
     return ruta
 
 @st.cache_resource(show_spinner="Cargando modelo...")
@@ -41,6 +41,7 @@ def preprocesar(imagen):
     arr = np.array(img, dtype=np.float32) / 255.0
     return np.expand_dims(arr, axis=0)
 
+# ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### ⚙️ Configuración")
     nombre_modelo = st.selectbox("Modelo", list(MODELOS_DRIVE.keys()), index=2)
@@ -49,9 +50,12 @@ with st.sidebar:
     for f in CLASES_FRUTA:
         st.markdown(f"• {EMOJIS_FRUTA.get(f,'🍑')} {f}")
 
+# ── Header ─────────────────────────────────────────────────────────────────────
 st.title("🍊 FruitScan")
 st.caption("Clasificador multitarea — Fruta & Estado")
+st.warning("⚠️ La primera predicción tarda 1-2 minutos mientras se descarga y carga el modelo.")
 
+# ── Upload ─────────────────────────────────────────────────────────────────────
 archivo = st.file_uploader("Sube una imagen de fruta", type=["jpg","jpeg","png","webp"])
 
 if archivo:
