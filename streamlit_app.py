@@ -354,3 +354,4 @@ with col_res:
             ← Sube una imagen para<br>comenzar el análisis.
         </div>
         """, unsafe_allow_html=True)
+
