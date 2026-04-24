@@ -1,4 +1,3 @@
-import sqlite3
 import hashlib
 import secrets
 import smtplib
@@ -6,19 +5,20 @@ import os
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
-DB_PATH = "/tmp/fruitscan.db"
+DB_URL = "postgresql://postgres:016758.DAfe*@db.isgumzwugaibqnqeevwd.supabase.co:5432/postgres"
 
 GMAIL_USER = "adminfs01@gmail.com"
 GMAIL_PASS = "izdq scag mtgy oulz"
 
-ADMIN_USER  = "adminfs01@gmail.com"
+ADMIN_EMAIL = "adminfs01@gmail.com"
+ADMIN_USER  = "admin"
 ADMIN_PASS  = "FruitScanFR1728"
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return psycopg2.connect(DB_URL, cursor_factory=RealDictCursor)
 
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
@@ -26,25 +26,63 @@ def hash_password(password: str) -> str:
 def init_db():
     conn = get_db()
     c = conn.cursor()
+
+    # Tabla usuarios
     c.execute("""
         CREATE TABLE IF NOT EXISTS usuarios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             username TEXT UNIQUE NOT NULL,
             email TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
-            verificado INTEGER DEFAULT 0,
+            verificado BOOLEAN DEFAULT FALSE,
             token TEXT,
-            token_expiry TEXT,
-            creado_en TEXT DEFAULT CURRENT_TIMESTAMP
+            token_expiry TIMESTAMP,
+            creado_en TIMESTAMP DEFAULT NOW()
         )
     """)
+
+    # Tabla predicciones
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS predicciones (
+            id SERIAL PRIMARY KEY,
+            usuario_id INTEGER REFERENCES usuarios(id) ON DELETE CASCADE,
+            modelo TEXT NOT NULL,
+            fruta TEXT NOT NULL,
+            estado TEXT NOT NULL,
+            confianza_fruta FLOAT NOT NULL,
+            confianza_estado FLOAT NOT NULL,
+            fecha TIMESTAMP DEFAULT NOW()
+        )
+    """)
+
+    # Tabla estadisticas por modelo
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS estadisticas_modelo (
+            id SERIAL PRIMARY KEY,
+            modelo TEXT NOT NULL,
+            total_predicciones INTEGER DEFAULT 0,
+            frutas_correctas INTEGER DEFAULT 0,
+            ultima_vez TIMESTAMP DEFAULT NOW(),
+            UNIQUE(modelo)
+        )
+    """)
+
+    # Insertar modelos base en estadisticas
+    for modelo in ["InceptionV3", "MobileNetV2", "VGG16"]:
+        c.execute("""
+            INSERT INTO estadisticas_modelo (modelo)
+            VALUES (%s)
+            ON CONFLICT (modelo) DO NOTHING
+        """, (modelo,))
+
     # Crear admin si no existe
-    c.execute("SELECT id FROM usuarios WHERE email = ?", (ADMIN_USER,))
+    c.execute("SELECT id FROM usuarios WHERE email = %s", (ADMIN_EMAIL,))
     if not c.fetchone():
         c.execute("""
             INSERT INTO usuarios (username, email, password_hash, verificado)
-            VALUES (?, ?, ?, 1)
-        """, ("admin", ADMIN_USER, hash_password(ADMIN_PASS)))
+            VALUES (%s, %s, %s, TRUE)
+        """, (ADMIN_USER, ADMIN_EMAIL, hash_password(ADMIN_PASS)))
+
     conn.commit()
     conn.close()
 
@@ -83,7 +121,6 @@ def enviar_token(email: str, token: str) -> bool:
         </div>
         """
         msg.attach(MIMEText(html, "html"))
-
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(GMAIL_USER, GMAIL_PASS)
             server.sendmail(GMAIL_USER, email, msg.as_string())
@@ -95,22 +132,21 @@ def enviar_token(email: str, token: str) -> bool:
 def registrar_usuario(username: str, email: str, password: str) -> dict:
     conn = get_db()
     c    = conn.cursor()
-    # Verificar duplicados
-    c.execute("SELECT id FROM usuarios WHERE email = ?", (email,))
+    c.execute("SELECT id FROM usuarios WHERE email = %s", (email,))
     if c.fetchone():
         conn.close()
         return {"ok": False, "msg": "Este correo ya está registrado."}
-    c.execute("SELECT id FROM usuarios WHERE username = ?", (username,))
+    c.execute("SELECT id FROM usuarios WHERE username = %s", (username,))
     if c.fetchone():
         conn.close()
         return {"ok": False, "msg": "Este nombre de usuario ya está en uso."}
 
-    token  = str(secrets.randbelow(900000) + 100000)  # 6 dígitos
-    expiry = (datetime.now() + timedelta(minutes=15)).isoformat()
+    token  = str(secrets.randbelow(900000) + 100000)
+    expiry = datetime.now() + timedelta(minutes=15)
 
     c.execute("""
         INSERT INTO usuarios (username, email, password_hash, token, token_expiry)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s)
     """, (username, email, hash_password(password), token, expiry))
     conn.commit()
     conn.close()
@@ -124,7 +160,7 @@ def registrar_usuario(username: str, email: str, password: str) -> dict:
 def verificar_token(email: str, token: str) -> dict:
     conn = get_db()
     c    = conn.cursor()
-    c.execute("SELECT * FROM usuarios WHERE email = ?", (email,))
+    c.execute("SELECT * FROM usuarios WHERE email = %s", (email,))
     user = c.fetchone()
     if not user:
         conn.close()
@@ -135,10 +171,10 @@ def verificar_token(email: str, token: str) -> dict:
     if user["token"] != token:
         conn.close()
         return {"ok": False, "msg": "Token incorrecto."}
-    if datetime.now() > datetime.fromisoformat(user["token_expiry"]):
+    if datetime.now() > user["token_expiry"]:
         conn.close()
         return {"ok": False, "msg": "Token expirado. Regístrate de nuevo."}
-    c.execute("UPDATE usuarios SET verificado=1, token=NULL, token_expiry=NULL WHERE email=?", (email,))
+    c.execute("UPDATE usuarios SET verificado=TRUE, token=NULL, token_expiry=NULL WHERE email=%s", (email,))
     conn.commit()
     conn.close()
     return {"ok": True, "msg": "Cuenta verificada exitosamente."}
@@ -146,7 +182,7 @@ def verificar_token(email: str, token: str) -> dict:
 def login_usuario(email: str, password: str) -> dict:
     conn = get_db()
     c    = conn.cursor()
-    c.execute("SELECT * FROM usuarios WHERE email = ?", (email,))
+    c.execute("SELECT * FROM usuarios WHERE email = %s", (email,))
     user = c.fetchone()
     conn.close()
     if not user:
@@ -155,4 +191,70 @@ def login_usuario(email: str, password: str) -> dict:
         return {"ok": False, "msg": "Cuenta no verificada. Revisa tu correo."}
     if user["password_hash"] != hash_password(password):
         return {"ok": False, "msg": "Contraseña incorrecta."}
-    return {"ok": True, "username": user["username"], "email": user["email"]}
+    return {"ok": True, "username": user["username"], "email": user["email"], "id": user["id"]}
+
+def guardar_prediccion(usuario_id: int, modelo: str, fruta: str, estado: str,
+                        confianza_fruta: float, confianza_estado: float):
+    conn = get_db()
+    c    = conn.cursor()
+    c.execute("""
+        INSERT INTO predicciones (usuario_id, modelo, fruta, estado, confianza_fruta, confianza_estado)
+        VALUES (%s, %s, %s, %s, %s, %s)
+    """, (usuario_id, modelo, fruta, estado, confianza_fruta, confianza_estado))
+    c.execute("""
+        UPDATE estadisticas_modelo
+        SET total_predicciones = total_predicciones + 1,
+            ultima_vez = NOW()
+        WHERE modelo = %s
+    """, (modelo,))
+    conn.commit()
+    conn.close()
+
+def obtener_historial(usuario_id: int, limite: int = 20) -> list:
+    conn = get_db()
+    c    = conn.cursor()
+    c.execute("""
+        SELECT modelo, fruta, estado, confianza_fruta, confianza_estado, fecha
+        FROM predicciones
+        WHERE usuario_id = %s
+        ORDER BY fecha DESC
+        LIMIT %s
+    """, (usuario_id, limite))
+    rows = c.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def obtener_estadisticas() -> list:
+    conn = get_db()
+    c    = conn.cursor()
+    c.execute("""
+        SELECT
+            e.modelo,
+            e.total_predicciones,
+            e.ultima_vez,
+            COUNT(p.id) FILTER (WHERE p.estado = 'Fresca') AS total_frescas,
+            COUNT(p.id) FILTER (WHERE p.estado = 'Podrida') AS total_podridas,
+            ROUND(AVG(p.confianza_fruta)::numeric * 100, 1) AS avg_confianza_fruta,
+            ROUND(AVG(p.confianza_estado)::numeric * 100, 1) AS avg_confianza_estado
+        FROM estadisticas_modelo e
+        LEFT JOIN predicciones p ON p.modelo = e.modelo
+        GROUP BY e.modelo, e.total_predicciones, e.ultima_vez
+        ORDER BY e.total_predicciones DESC
+    """)
+    rows = c.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def obtener_resumen_frutas() -> list:
+    conn = get_db()
+    c    = conn.cursor()
+    c.execute("""
+        SELECT fruta, COUNT(*) as total,
+               ROUND(AVG(confianza_fruta)::numeric * 100, 1) as avg_confianza
+        FROM predicciones
+        GROUP BY fruta
+        ORDER BY total DESC
+    """)
+    rows = c.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
