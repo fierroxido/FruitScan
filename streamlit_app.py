@@ -4,57 +4,34 @@ import numpy as np
 import tensorflow as tf
 from PIL import Image
 import gdown
-from auth import init_db, registrar_usuario, verificar_token, login_usuario
+import pandas as pd
+from auth import (init_db, registrar_usuario, verificar_token, login_usuario,
+                  guardar_prediccion, obtener_historial, obtener_estadisticas,
+                  obtener_resumen_frutas)
 
-st.set_page_config(
-    page_title="FruitScan",
-    page_icon="🍊",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+st.set_page_config(page_title="FruitScan", page_icon="🍊", layout="wide", initial_sidebar_state="expanded")
 
-# ── Inicializar DB ─────────────────────────────────────────────────────────────
 init_db()
 
-# ── Session state ──────────────────────────────────────────────────────────────
-if "tema"         not in st.session_state: st.session_state.tema        = "dark"
-if "usuario"      not in st.session_state: st.session_state.usuario     = None
-if "pantalla"     not in st.session_state: st.session_state.pantalla    = "login"
-if "reg_email"    not in st.session_state: st.session_state.reg_email   = ""
+if "tema"      not in st.session_state: st.session_state.tema      = "dark"
+if "usuario"   not in st.session_state: st.session_state.usuario   = None
+if "pantalla"  not in st.session_state: st.session_state.pantalla  = "login"
+if "reg_email" not in st.session_state: st.session_state.reg_email = ""
+if "tab"       not in st.session_state: st.session_state.tab       = "clasificar"
 
 tema = st.session_state.tema
 
-# ── Colores por tema ───────────────────────────────────────────────────────────
 if tema == "dark":
-    BG      = "#080c12"
-    SURFACE = "#111826"
-    BORDER  = "#1e2d42"
-    TEXT    = "#e8f0f8"
-    TEXT2   = "#94a8bc"
-    MUTED   = "#4a6070"
-    ACCENT  = "#38bdf8"
-    ACCENT2 = "#818cf8"
-    FRESH   = "#34d399"
-    ROTTEN  = "#fb7185"
-    BTNTEXT = "#080c12"
-    GRAD1   = "rgba(56,189,248,.06)"
-    GRAD2   = "rgba(129,140,248,.06)"
+    BG="#080c12"; SURFACE="#111826"; BORDER="#1e2d42"
+    TEXT="#e8f0f8"; TEXT2="#94a8bc"; MUTED="#4a6070"
+    ACCENT="#38bdf8"; ACCENT2="#818cf8"; FRESH="#34d399"; ROTTEN="#fb7185"
+    GRAD1="rgba(56,189,248,.06)"; GRAD2="rgba(129,140,248,.06)"
 else:
-    BG      = "#f0f5fb"
-    SURFACE = "#ffffff"
-    BORDER  = "#d0dce8"
-    TEXT    = "#0d1926"
-    TEXT2   = "#3d5470"
-    MUTED   = "#8099b0"
-    ACCENT  = "#0284c7"
-    ACCENT2 = "#6366f1"
-    FRESH   = "#059669"
-    ROTTEN  = "#e11d48"
-    BTNTEXT = "#ffffff"
-    GRAD1   = "rgba(2,132,199,.05)"
-    GRAD2   = "rgba(99,102,241,.05)"
+    BG="#f0f5fb"; SURFACE="#ffffff"; BORDER="#d0dce8"
+    TEXT="#0d1926"; TEXT2="#3d5470"; MUTED="#8099b0"
+    ACCENT="#0284c7"; ACCENT2="#6366f1"; FRESH="#059669"; ROTTEN="#e11d48"
+    GRAD1="rgba(2,132,199,.05)"; GRAD2="rgba(99,102,241,.05)"
 
-# ── CSS global ─────────────────────────────────────────────────────────────────
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;900&family=JetBrains+Mono:wght@400;500&display=swap');
@@ -62,17 +39,14 @@ html,body,[class*="css"]{{font-family:'Outfit',sans-serif!important}}
 [data-testid="stAppViewContainer"]{{background:{BG};background-image:radial-gradient(ellipse 60% 40% at 10% 10%,{GRAD1} 0%,transparent 60%),radial-gradient(ellipse 40% 30% at 90% 80%,{GRAD2} 0%,transparent 60%)}}
 [data-testid="stSidebar"]{{background:{SURFACE}!important;border-right:1px solid {BORDER}}}
 [data-testid="stHeader"]{{background:transparent}}
-.main-title{{font-family:'Outfit',sans-serif;font-weight:900;font-size:3.2rem;letter-spacing:-.03em;color:{ACCENT};line-height:1;margin-bottom:0}}
+.main-title{{font-family:'Outfit',sans-serif;font-weight:900;font-size:3.2rem;letter-spacing:-.03em;color:{ACCENT};line-height:1}}
 .main-title span{{color:{TEXT}}}
 .main-subtitle{{font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;color:{MUTED};margin-bottom:2rem}}
 .auth-card{{background:{SURFACE};border:1px solid {BORDER};border-radius:20px;padding:40px;max-width:460px;margin:0 auto;box-shadow:0 8px 40px rgba(0,0,0,.2);position:relative;overflow:hidden}}
 .auth-card::before{{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,{ACCENT},{ACCENT2})}}
 .auth-title{{font-family:'Outfit',sans-serif;font-weight:900;font-size:1.6rem;color:{TEXT};margin-bottom:4px}}
 .auth-sub{{font-size:.8rem;color:{MUTED};margin-bottom:28px}}
-.field-label{{font-size:.68rem;letter-spacing:.15em;text-transform:uppercase;color:{MUTED};margin-bottom:6px;font-weight:600}}
-.divider{{text-align:center;color:{MUTED};font-size:.8rem;margin:16px 0;position:relative}}
-.divider::before,.divider::after{{content:'';position:absolute;top:50%;width:42%;height:1px;background:{BORDER}}}
-.divider::before{{left:0}}.divider::after{{right:0}}
+.divider{{text-align:center;color:{MUTED};font-size:.8rem;margin:16px 0}}
 .result-card{{background:{SURFACE};border:1px solid {BORDER};border-radius:16px;padding:28px 32px;margin-top:8px;position:relative;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.15)}}
 .result-card::before{{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,{ACCENT},{ACCENT2})}}
 .result-fruta{{font-family:'Outfit',sans-serif;font-size:2.6rem;font-weight:900;letter-spacing:-.02em;color:{TEXT};line-height:1;margin-bottom:10px}}
@@ -93,12 +67,15 @@ html,body,[class*="css"]{{font-family:'Outfit',sans-serif!important}}
 .bar-pct{{width:48px;font-size:.7rem;color:{MUTED};text-align:right;flex-shrink:0;font-family:'JetBrains Mono',monospace}}
 .fruit-chip{{font-size:.7rem;padding:4px 11px;border:1px solid {BORDER};border-radius:100px;color:{TEXT2};background:{BG};display:inline-block;margin:3px 2px}}
 .model-tag{{font-size:.65rem;color:{MUTED};letter-spacing:.12em;text-transform:uppercase;margin-top:14px;font-family:'JetBrains Mono',monospace}}
+.stat-card{{background:{SURFACE};border:1px solid {BORDER};border-radius:14px;padding:20px 24px;text-align:center}}
+.stat-value{{font-family:'JetBrains Mono',monospace;font-size:2rem;font-weight:700;color:{ACCENT}}}
+.stat-label{{font-size:.65rem;letter-spacing:.15em;text-transform:uppercase;color:{MUTED};margin-top:4px;font-weight:600}}
+.hist-row{{background:{SURFACE};border:1px solid {BORDER};border-radius:10px;padding:14px 18px;margin-bottom:8px;display:flex;align-items:center;gap:16px}}
 .user-badge{{display:inline-flex;align-items:center;gap:8px;background:{BG};border:1px solid {BORDER};border-radius:100px;padding:6px 14px;font-size:.8rem;color:{TEXT2}}}
 #MainMenu,footer{{visibility:hidden}}
 </style>
 """, unsafe_allow_html=True)
 
-# ── Constantes ML ──────────────────────────────────────────────────────────────
 MODELOS_DRIVE = {
     "InceptionV3": "1BYrUWEhK_4NtXY_SKH2mpKTJ_uusHYOT",
     "MobileNetV2": "1MGM1f8c46f07j1K_UUllfoplhjCBhQCp",
@@ -130,56 +107,47 @@ def predecir(interpreter, imagen):
     return salidas[0], salidas[1]
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PANTALLAS DE AUTENTICACIÓN
+# PANTALLAS AUTH
 # ══════════════════════════════════════════════════════════════════════════════
 def pantalla_login():
     st.markdown('<div class="main-title">FRUIT<span>SCAN</span></div>', unsafe_allow_html=True)
     st.markdown('<div class="main-subtitle">Clasificador multitarea · Fruta & Estado</div>', unsafe_allow_html=True)
-
     _, col, _ = st.columns([1, 1.4, 1])
     with col:
         st.markdown('<div class="auth-card">', unsafe_allow_html=True)
         st.markdown('<div class="auth-title">Iniciar sesión</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="auth-sub">Ingresa con tu cuenta de FruitScan</div>', unsafe_allow_html=True)
-
+        st.markdown('<div class="auth-sub">Ingresa con tu cuenta de FruitScan</div>', unsafe_allow_html=True)
         email    = st.text_input("Correo electrónico", placeholder="usuario@email.com", key="login_email")
         password = st.text_input("Contraseña", type="password", placeholder="••••••••", key="login_pass")
-
         if st.button("Ingresar", use_container_width=True, type="primary"):
             if not email or not password:
                 st.error("Completa todos los campos.")
             else:
                 res = login_usuario(email, password)
                 if res["ok"]:
-                    st.session_state.usuario  = {"username": res["username"], "email": res["email"]}
+                    st.session_state.usuario  = {"username": res["username"], "email": res["email"], "id": res["id"]}
                     st.session_state.pantalla = "app"
                     st.rerun()
                 else:
                     st.error(res["msg"])
-
-        st.markdown(f'<div class="divider">¿No tienes cuenta?</div>', unsafe_allow_html=True)
-
+        st.markdown('<div class="divider">¿No tienes cuenta?</div>', unsafe_allow_html=True)
         if st.button("Crear cuenta nueva", use_container_width=True):
             st.session_state.pantalla = "registro"
             st.rerun()
-
         st.markdown('</div>', unsafe_allow_html=True)
 
 def pantalla_registro():
     st.markdown('<div class="main-title">FRUIT<span>SCAN</span></div>', unsafe_allow_html=True)
     st.markdown('<div class="main-subtitle">Crear cuenta nueva</div>', unsafe_allow_html=True)
-
     _, col, _ = st.columns([1, 1.4, 1])
     with col:
         st.markdown('<div class="auth-card">', unsafe_allow_html=True)
         st.markdown('<div class="auth-title">Registro</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="auth-sub">Te enviaremos un token de verificación a tu correo</div>', unsafe_allow_html=True)
-
-        username = st.text_input("Nombre de usuario", placeholder="ej: juan123", key="reg_user")
-        email    = st.text_input("Correo electrónico", placeholder="usuario@email.com", key="reg_mail")
-        password = st.text_input("Contraseña", type="password", placeholder="Mínimo 8 caracteres", key="reg_pass")
-        password2= st.text_input("Confirmar contraseña", type="password", placeholder="Repite la contraseña", key="reg_pass2")
-
+        st.markdown('<div class="auth-sub">Te enviaremos un token de verificación a tu correo</div>', unsafe_allow_html=True)
+        username  = st.text_input("Nombre de usuario", placeholder="ej: juan123", key="reg_user")
+        email     = st.text_input("Correo electrónico", placeholder="usuario@email.com", key="reg_mail")
+        password  = st.text_input("Contraseña", type="password", placeholder="Mínimo 8 caracteres", key="reg_pass")
+        password2 = st.text_input("Confirmar contraseña", type="password", placeholder="Repite la contraseña", key="reg_pass2")
         if st.button("Registrarme", use_container_width=True, type="primary"):
             if not all([username, email, password, password2]):
                 st.error("Completa todos los campos.")
@@ -191,31 +159,26 @@ def pantalla_registro():
                 with st.spinner("Enviando token..."):
                     res = registrar_usuario(username, email, password)
                 if res["ok"]:
-                    st.session_state.reg_email   = email
-                    st.session_state.pantalla    = "verificar"
+                    st.session_state.reg_email  = email
+                    st.session_state.pantalla   = "verificar"
                     st.rerun()
                 else:
                     st.error(res["msg"])
-
-        st.markdown(f'<div class="divider">¿Ya tienes cuenta?</div>', unsafe_allow_html=True)
+        st.markdown('<div class="divider">¿Ya tienes cuenta?</div>', unsafe_allow_html=True)
         if st.button("Iniciar sesión", use_container_width=True):
             st.session_state.pantalla = "login"
             st.rerun()
-
         st.markdown('</div>', unsafe_allow_html=True)
 
 def pantalla_verificar():
     st.markdown('<div class="main-title">FRUIT<span>SCAN</span></div>', unsafe_allow_html=True)
     st.markdown('<div class="main-subtitle">Verifica tu cuenta</div>', unsafe_allow_html=True)
-
     _, col, _ = st.columns([1, 1.4, 1])
     with col:
         st.markdown('<div class="auth-card">', unsafe_allow_html=True)
         st.markdown('<div class="auth-title">Código de verificación</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="auth-sub">Ingresa el token de 6 dígitos enviado a <strong>{st.session_state.reg_email}</strong></div>', unsafe_allow_html=True)
-
-        token = st.text_input("Token", placeholder="123456", max_chars=6, key="token_input")
-
+        st.markdown(f'<div class="auth-sub">Token enviado a <strong>{st.session_state.reg_email}</strong></div>', unsafe_allow_html=True)
+        token = st.text_input("Token de 6 dígitos", placeholder="123456", max_chars=6, key="token_input")
         if st.button("Verificar cuenta", use_container_width=True, type="primary"):
             if not token:
                 st.error("Ingresa el token.")
@@ -227,35 +190,29 @@ def pantalla_verificar():
                     st.rerun()
                 else:
                     st.error(res["msg"])
-
-        st.markdown(f'<div class="divider">¿Token vencido?</div>', unsafe_allow_html=True)
+        st.markdown('<div class="divider">¿Token vencido?</div>', unsafe_allow_html=True)
         if st.button("Volver al registro", use_container_width=True):
             st.session_state.pantalla = "registro"
             st.rerun()
-
         st.markdown('</div>', unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # APP PRINCIPAL
 # ══════════════════════════════════════════════════════════════════════════════
 def pantalla_app():
-    # Sidebar
+    u = st.session_state.usuario
+
     with st.sidebar:
         st.markdown('<div class="main-title" style="font-size:2rem">FRUIT<span>SCAN</span></div>', unsafe_allow_html=True)
         st.markdown('<div class="main-subtitle">Clasificador de frutas</div>', unsafe_allow_html=True)
-
-        # Usuario
-        u = st.session_state.usuario
         st.markdown(f'<div class="user-badge">👤 {u["username"]}</div>', unsafe_allow_html=True)
         st.markdown("")
 
-        # Toggle tema
         icono = "☀️" if tema == "dark" else "🌙"
         label = "Modo claro" if tema == "dark" else "Modo oscuro"
         if st.button(f"{icono} {label}", use_container_width=True):
             st.session_state.tema = "light" if tema == "dark" else "dark"
             st.rerun()
-
         if st.button("🚪 Cerrar sesión", use_container_width=True):
             st.session_state.usuario  = None
             st.session_state.pantalla = "login"
@@ -265,87 +222,176 @@ def pantalla_app():
         st.markdown(f'<div style="font-size:.62rem;letter-spacing:.18em;text-transform:uppercase;color:{MUTED};margin-bottom:10px;font-weight:600">Modelo</div>', unsafe_allow_html=True)
         nombre_modelo = st.selectbox("", list(MODELOS_DRIVE.keys()), index=0, label_visibility="collapsed")
         st.markdown("---")
-        st.markdown(f'<div style="font-size:.62rem;letter-spacing:.18em;text-transform:uppercase;color:{MUTED};margin-bottom:10px;font-weight:600">Frutas soportadas</div>', unsafe_allow_html=True)
-        chips = "".join([f'<span class="fruit-chip">{EMOJIS_FRUTA.get(f,"🍑")} {f}</span>' for f in CLASES_FRUTA])
-        st.markdown(chips, unsafe_allow_html=True)
-
-    # Header
-    st.markdown('<div class="main-title">FRUIT<span>SCAN</span></div>', unsafe_allow_html=True)
-    st.markdown('<div class="main-subtitle">Clasificador multitarea · Fruta &amp; Estado</div>', unsafe_allow_html=True)
-
-    col_img, col_res = st.columns([1.1, 1], gap="large")
-
-    with col_img:
-        if st.session_state.get("limpiar"):
-            st.session_state["limpiar"] = False
+        st.markdown(f'<div style="font-size:.62rem;letter-spacing:.18em;text-transform:uppercase;color:{MUTED};margin-bottom:10px;font-weight:600">Navegación</div>', unsafe_allow_html=True)
+        if st.button("🔍 Clasificar", use_container_width=True):
+            st.session_state.tab = "clasificar"
+            st.rerun()
+        if st.button("📋 Mi historial", use_container_width=True):
+            st.session_state.tab = "historial"
+            st.rerun()
+        if st.button("📊 Estadísticas", use_container_width=True):
+            st.session_state.tab = "estadisticas"
             st.rerun()
 
-        archivo = st.file_uploader("Sube una imagen de fruta", type=["jpg","jpeg","png","webp"], key="uploader")
-        if archivo:
-            imagen = Image.open(archivo)
-            st.image(imagen, use_container_width=True)
-            if st.button("🗑️ Quitar imagen", use_container_width=True):
-                st.session_state["limpiar"] = True
+    # ── Tab Clasificar ────────────────────────────────────────────────────────
+    if st.session_state.tab == "clasificar":
+        st.markdown('<div class="main-title">FRUIT<span>SCAN</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="main-subtitle">Clasificador multitarea · Fruta & Estado</div>', unsafe_allow_html=True)
+
+        col_img, col_res = st.columns([1.1, 1], gap="large")
+
+        with col_img:
+            if st.session_state.get("limpiar"):
+                st.session_state["limpiar"] = False
                 st.rerun()
-        else:
-            st.markdown(f"""
-            <div style="aspect-ratio:1;background:{SURFACE};border:2px dashed {BORDER};
-                 border-radius:16px;display:flex;align-items:center;justify-content:center;
-                 flex-direction:column;gap:12px;color:{MUTED};text-align:center;padding:40px;">
-                <div style="font-size:3rem;filter:grayscale(.5)">🍊</div>
-                <div style="font-size:0.78rem;letter-spacing:.1em;text-transform:uppercase;line-height:1.8">
-                    Arrastra o selecciona<br>una imagen
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-    with col_res:
-        if archivo:
-            with st.spinner("Analizando..."):
-                try:
-                    interpreter = cargar_modelo(nombre_modelo)
-                    pred_fruta, pred_estado = predecir(interpreter, imagen)
-                    fruta   = CLASES_FRUTA[int(np.argmax(pred_fruta))]
-                    estado  = CLASES_ESTADO[int(np.argmax(pred_estado))]
-                    emoji   = EMOJIS_FRUTA.get(fruta, "🍑")
-                    conf_f  = float(np.max(pred_fruta)) * 100
-                    conf_e  = float(np.max(pred_estado)) * 100
-                    fresca  = estado == "Fresca"
-                    icono_e = "✅" if fresca else "🔴"
-                    ecls    = "result-estado-fresh" if fresca else "result-estado-rotten"
-
-                    st.markdown(f"""
-                    <div class="result-card">
-                        <div class="result-fruta">{emoji} {fruta}</div>
-                        <div class="{ecls}">{icono_e} {estado}</div>
-                        <div class="conf-row">
-                            <div class="conf-box"><div class="conf-label">Confianza fruta</div><div class="conf-value">{conf_f:.1f}%</div></div>
-                            <div class="conf-box"><div class="conf-label">Confianza estado</div><div class="conf-value">{conf_e:.1f}%</div></div>
-                        </div>
-                        <div class="model-tag">Modelo: {nombre_modelo} finetuned</div>
+            archivo = st.file_uploader("Sube una imagen de fruta", type=["jpg","jpeg","png","webp"], key="uploader")
+            if archivo:
+                imagen = Image.open(archivo)
+                st.image(imagen, use_container_width=True)
+                if st.button("🗑️ Quitar imagen", use_container_width=True):
+                    st.session_state["limpiar"] = True
+                    st.rerun()
+            else:
+                st.markdown(f"""
+                <div style="aspect-ratio:1;background:{SURFACE};border:2px dashed {BORDER};
+                     border-radius:16px;display:flex;align-items:center;justify-content:center;
+                     flex-direction:column;gap:12px;color:{MUTED};text-align:center;padding:40px">
+                    <div style="font-size:3rem;filter:grayscale(.5)">🍊</div>
+                    <div style="font-size:.78rem;letter-spacing:.1em;text-transform:uppercase;line-height:1.8">
+                        Arrastra o selecciona<br>una imagen
                     </div>
-                    """, unsafe_allow_html=True)
+                </div>""", unsafe_allow_html=True)
 
-                    st.markdown('<div class="bar-section-title">Probabilidad por fruta</div>', unsafe_allow_html=True)
-                    for n, p in sorted(zip(CLASES_FRUTA, pred_fruta), key=lambda x: x[1], reverse=True):
-                        pct  = float(p) * 100
-                        fill = "bar-fill-a" if n == fruta else "bar-fill-b"
-                        st.markdown(f'<div class="bar-row-c"><span class="bar-name">{n}</span><div class="bar-track"><div class="{fill}" style="width:{pct:.1f}%"></div></div><span class="bar-pct">{pct:.1f}%</span></div>', unsafe_allow_html=True)
+        with col_res:
+            if archivo:
+                with st.spinner("Analizando..."):
+                    try:
+                        interpreter = cargar_modelo(nombre_modelo)
+                        pred_fruta, pred_estado = predecir(interpreter, imagen)
+                        fruta   = CLASES_FRUTA[int(np.argmax(pred_fruta))]
+                        estado  = CLASES_ESTADO[int(np.argmax(pred_estado))]
+                        emoji   = EMOJIS_FRUTA.get(fruta, "🍑")
+                        conf_f  = float(np.max(pred_fruta)) * 100
+                        conf_e  = float(np.max(pred_estado)) * 100
+                        fresca  = estado == "Fresca"
+                        icono_e = "✅" if fresca else "🔴"
+                        ecls    = "result-estado-fresh" if fresca else "result-estado-rotten"
 
-                    st.markdown('<div class="bar-section-title">Estado</div>', unsafe_allow_html=True)
-                    for n, p in zip(CLASES_ESTADO, pred_estado):
-                        pct  = float(p) * 100
-                        fill = "bar-fill-f" if n == "Fresca" else "bar-fill-r"
-                        st.markdown(f'<div class="bar-row-c"><span class="bar-name">{n}</span><div class="bar-track"><div class="{fill}" style="width:{pct:.1f}%"></div></div><span class="bar-pct">{pct:.1f}%</span></div>', unsafe_allow_html=True)
+                        # Guardar en PostgreSQL
+                        guardar_prediccion(u["id"], nombre_modelo, fruta, estado, conf_f/100, conf_e/100)
 
-                except Exception as e:
-                    st.error(f"Error: {e}")
+                        st.markdown(f"""
+                        <div class="result-card">
+                            <div class="result-fruta">{emoji} {fruta}</div>
+                            <div class="{ecls}">{icono_e} {estado}</div>
+                            <div class="conf-row">
+                                <div class="conf-box"><div class="conf-label">Confianza fruta</div><div class="conf-value">{conf_f:.1f}%</div></div>
+                                <div class="conf-box"><div class="conf-label">Confianza estado</div><div class="conf-value">{conf_e:.1f}%</div></div>
+                            </div>
+                            <div class="model-tag">Modelo: {nombre_modelo} finetuned</div>
+                        </div>""", unsafe_allow_html=True)
+
+                        st.markdown('<div class="bar-section-title">Probabilidad por fruta</div>', unsafe_allow_html=True)
+                        for n, p in sorted(zip(CLASES_FRUTA, pred_fruta), key=lambda x: x[1], reverse=True):
+                            pct  = float(p) * 100
+                            fill = "bar-fill-a" if n == fruta else "bar-fill-b"
+                            st.markdown(f'<div class="bar-row-c"><span class="bar-name">{n}</span><div class="bar-track"><div class="{fill}" style="width:{pct:.1f}%"></div></div><span class="bar-pct">{pct:.1f}%</span></div>', unsafe_allow_html=True)
+
+                        st.markdown('<div class="bar-section-title">Estado</div>', unsafe_allow_html=True)
+                        for n, p in zip(CLASES_ESTADO, pred_estado):
+                            pct  = float(p) * 100
+                            fill = "bar-fill-f" if n == "Fresca" else "bar-fill-r"
+                            st.markdown(f'<div class="bar-row-c"><span class="bar-name">{n}</span><div class="bar-track"><div class="{fill}" style="width:{pct:.1f}%"></div></div><span class="bar-pct">{pct:.1f}%</span></div>', unsafe_allow_html=True)
+
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+
+    # ── Tab Historial ─────────────────────────────────────────────────────────
+    elif st.session_state.tab == "historial":
+        st.markdown('<div class="main-title">Mi <span>Historial</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="main-subtitle">Últimas 20 predicciones</div>', unsafe_allow_html=True)
+
+        historial = obtener_historial(u["id"])
+        if not historial:
+            st.info("Aún no tienes predicciones. ¡Clasifica una fruta primero!")
         else:
-            st.markdown(f"""
-            <div style="padding:40px 0;color:{MUTED};font-size:.85rem;line-height:2">
-                &#8592; Sube una imagen para<br>comenzar el análisis.
-            </div>
-            """, unsafe_allow_html=True)
+            for h in historial:
+                emoji  = EMOJIS_FRUTA.get(h["fruta"], "🍑")
+                icono  = "✅" if h["estado"] == "Fresca" else "🔴"
+                color  = FRESH if h["estado"] == "Fresca" else ROTTEN
+                fecha  = h["fecha"].strftime("%d/%m/%Y %H:%M") if h["fecha"] else "—"
+                st.markdown(f"""
+                <div class="hist-row">
+                    <div style="font-size:1.8rem">{emoji}</div>
+                    <div style="flex:1">
+                        <div style="font-weight:700;color:{TEXT};font-size:.95rem">{h["fruta"]}</div>
+                        <div style="font-size:.72rem;color:{MUTED}">{h["modelo"]} · {fecha}</div>
+                    </div>
+                    <div style="text-align:right">
+                        <div style="color:{color};font-weight:600;font-size:.85rem">{icono} {h["estado"]}</div>
+                        <div style="font-size:.7rem;color:{MUTED};font-family:'JetBrains Mono',monospace">
+                            {h["confianza_fruta"]*100:.1f}% fruta · {h["confianza_estado"]*100:.1f}% estado
+                        </div>
+                    </div>
+                </div>""", unsafe_allow_html=True)
+
+    # ── Tab Estadísticas ──────────────────────────────────────────────────────
+    elif st.session_state.tab == "estadisticas":
+        st.markdown('<div class="main-title">Estadís<span>ticas</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="main-subtitle">Uso de modelos y frutas más analizadas</div>', unsafe_allow_html=True)
+
+        stats   = obtener_estadisticas()
+        frutas  = obtener_resumen_frutas()
+
+        # Métricas globales
+        total = sum(s["total_predicciones"] for s in stats)
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown(f'<div class="stat-card"><div class="stat-value">{total}</div><div class="stat-label">Total predicciones</div></div>', unsafe_allow_html=True)
+        with col2:
+            top_modelo = stats[0]["modelo"] if stats else "—"
+            st.markdown(f'<div class="stat-card"><div class="stat-value" style="font-size:1.4rem">{top_modelo}</div><div class="stat-label">Modelo más usado</div></div>', unsafe_allow_html=True)
+        with col3:
+            top_fruta = frutas[0]["fruta"] if frutas else "—"
+            emoji_tf  = EMOJIS_FRUTA.get(top_fruta, "🍑")
+            st.markdown(f'<div class="stat-card"><div class="stat-value" style="font-size:1.4rem">{emoji_tf} {top_fruta}</div><div class="stat-label">Fruta más analizada</div></div>', unsafe_allow_html=True)
+
+        st.markdown("---")
+        col_a, col_b = st.columns(2)
+
+        with col_a:
+            st.markdown(f'<div class="bar-section-title">Uso por modelo</div>', unsafe_allow_html=True)
+            for s in stats:
+                pct  = (s["total_predicciones"] / total * 100) if total > 0 else 0
+                st.markdown(f"""
+                <div class="bar-row-c">
+                    <span class="bar-name">{s["modelo"]}</span>
+                    <div class="bar-track"><div class="bar-fill-a" style="width:{pct:.1f}%"></div></div>
+                    <span class="bar-pct">{s["total_predicciones"]}</span>
+                </div>
+                <div style="font-size:.68rem;color:{MUTED};margin-bottom:10px;padding-left:130px">
+                    Confianza promedio: {s["avg_confianza_fruta"] or 0}%
+                </div>""", unsafe_allow_html=True)
+
+        with col_b:
+            st.markdown(f'<div class="bar-section-title">Frutas más analizadas</div>', unsafe_allow_html=True)
+            total_frutas = sum(f["total"] for f in frutas) or 1
+            for f in frutas:
+                pct   = f["total"] / total_frutas * 100
+                emoji = EMOJIS_FRUTA.get(f["fruta"], "🍑")
+                st.markdown(f"""
+                <div class="bar-row-c">
+                    <span class="bar-name">{emoji} {f["fruta"]}</span>
+                    <div class="bar-track"><div class="bar-fill-a" style="width:{pct:.1f}%"></div></div>
+                    <span class="bar-pct">{f["total"]}</span>
+                </div>""", unsafe_allow_html=True)
+
+        if stats:
+            st.markdown("---")
+            st.markdown(f'<div class="bar-section-title">Detalle por modelo</div>', unsafe_allow_html=True)
+            df = pd.DataFrame(stats)[["modelo","total_predicciones","total_frescas","total_podridas","avg_confianza_fruta","avg_confianza_estado"]]
+            df.columns = ["Modelo","Total","Frescas","Podridas","Conf. Fruta %","Conf. Estado %"]
+            st.dataframe(df, use_container_width=True, hide_index=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ROUTER
