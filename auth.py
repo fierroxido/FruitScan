@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-DB_URL = "postgresql://postgres:016758.DAfe*@db.isgumzwugaibqnqeevwd.supabase.co:5432/postgres"
+DB_URL = "postgresql://postgres.isgumzwugaibqnqeevwd:016758.DAfe*@aws-0-sa-east-1.pooler.supabase.com:6543/postgres"
 
 GMAIL_USER = "adminfs01@gmail.com"
 GMAIL_PASS = "izdq scag mtgy oulz"
