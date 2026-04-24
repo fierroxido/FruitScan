@@ -1,7 +1,8 @@
 streamlit
-tflite-runtime
+tflite-runtime==2.14.0
 gdown
 numpy
 Pillow
 psycopg2-binary
 pandas
+ 
