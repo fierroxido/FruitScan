@@ -3,3 +3,5 @@ tensorflow-cpu==2.20.0
 gdown
 numpy
 Pillow
+psycopg2-binary
+pandas
