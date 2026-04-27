@@ -1,7 +1,7 @@
 import os
 import streamlit as st
 import numpy as np
-import tflite_runtime.interpreter as tflite
+import tensorflow as tf
 from PIL import Image
 import gdown
 import pandas as pd
@@ -92,7 +92,7 @@ def cargar_modelo(nombre):
     ruta = os.path.join(MODELOS_DIR, f"{nombre}.tflite")
     if not os.path.exists(ruta):
         gdown.download(f"https://drive.google.com/uc?id={MODELOS_DRIVE[nombre]}", ruta, quiet=False)
-    interpreter = tflite.Interpreter(model_path=ruta)
+    interpreter = tf.lite.Interpreter(model_path=ruta)
     interpreter.allocate_tensors()
     return interpreter
 
