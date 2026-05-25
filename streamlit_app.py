@@ -29,9 +29,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-
+st.write("DB:", os.environ.get("DB_URL", "NO ENCONTRADA")[:30])
 init_db()
-
 # ── Session state ─────────────────────────────────────────────────────────────
 for k, v in [
     ("tema",      "dark"),
