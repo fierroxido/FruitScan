@@ -9,34 +9,24 @@ from datetime import datetime, timedelta
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-# ── Credenciales: leídas en tiempo de ejecución (no al importar) ─────────────
-def _secret(key: str, fallback: str = "") -> str:
-    try:
-        import streamlit as st
-        val = st.secrets.get(key)
-        if val:
-            return str(val)
-    except Exception:
-        pass
-    return os.environ.get(key, fallback)
-
+# ── Credenciales desde variables de entorno (inyectadas por streamlit_app.py) ─
 def _get_db_url():
-    return _secret("DB_URL", "postgresql://postgres.isgumzwugaibqnqeevwd:016758.DAfe*@aws-1-sa-east-1.pooler.supabase.com:6543/postgres")
+    return os.environ.get("DB_URL", "postgresql://postgres.isgumzwugaibqnqeevwd:016758.DAfe*@aws-1-sa-east-1.pooler.supabase.com:6543/postgres")
 
 def _get_gmail_user():
-    return _secret("GMAIL_USER", "adminfs01@gmail.com")
+    return os.environ.get("GMAIL_USER", "adminfs01@gmail.com")
 
 def _get_gmail_pass():
-    return _secret("GMAIL_PASS", "izdq scag mtgy oulz")
+    return os.environ.get("GMAIL_PASS", "izdq scag mtgy oulz")
 
 def _get_admin_email():
-    return _secret("ADMIN_EMAIL", "adminfs01@gmail.com")
+    return os.environ.get("ADMIN_EMAIL", "adminfs01@gmail.com")
 
 def _get_admin_user():
-    return _secret("ADMIN_USER", "admin")
+    return os.environ.get("ADMIN_USER", "admin")
 
 def _get_admin_pass():
-    return _secret("ADMIN_PASS", "FruitScanFR1728")
+    return os.environ.get("ADMIN_PASS", "FruitScanFR1728")
 
 # ── Roles disponibles ─────────────────────────────────────────────────────────
 ROLES = {
