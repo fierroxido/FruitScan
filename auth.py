@@ -11,7 +11,7 @@ from psycopg2.extras import RealDictCursor
 
 # ── Credenciales desde variables de entorno (inyectadas por streamlit_app.py) ─
 def _get_db_url():
-    return os.environ.get("DB_URL", "postgresql://postgres:016758.DAfe*@db.isgumzwugaibqnqeevwd.supabase.co:5432/postgres?sslmode=require&gssencmode=disable")
+return os.environ.get("DB_URL", "postgresql://postgres.isgumzwugaibqnqeevwd:016758.DAfe*@aws-0-sa-east-1.pooler.supabase.com:5432/postgres?sslmode=require")
 
 def _get_gmail_user():
     return os.environ.get("GMAIL_USER", "adminfs01@gmail.com")
