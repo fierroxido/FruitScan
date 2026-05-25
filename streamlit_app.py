@@ -1,6 +1,15 @@
 import os
 import io
 import streamlit as st
+
+# ── Inyectar secrets en os.environ ANTES de importar auth ────────────────────
+try:
+    for _k in ["DB_URL","GMAIL_USER","GMAIL_PASS","ADMIN_EMAIL","ADMIN_USER","ADMIN_PASS"]:
+        if _k in st.secrets:
+            os.environ[_k] = str(st.secrets[_k])
+except Exception:
+    pass
+
 import numpy as np
 import tensorflow as tf
 from PIL import Image
