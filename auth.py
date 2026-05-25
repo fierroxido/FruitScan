@@ -9,20 +9,34 @@ from datetime import datetime, timedelta
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-# ── Credenciales: primero secrets de Streamlit, luego variables de entorno ────
+# ── Credenciales: leídas en tiempo de ejecución (no al importar) ─────────────
 def _secret(key: str, fallback: str = "") -> str:
     try:
         import streamlit as st
-        return st.secrets[key]
+        val = st.secrets.get(key)
+        if val:
+            return str(val)
     except Exception:
-        return os.environ.get(key, fallback)
+        pass
+    return os.environ.get(key, fallback)
 
-DB_URL     = _secret("DB_URL",     "postgresql://postgres.isgumzwugaibqnqeevwd:016758.DAfe*@aws-1-sa-east-1.pooler.supabase.com:6543/postgres")
-GMAIL_USER = _secret("GMAIL_USER", "adminfs01@gmail.com")
-GMAIL_PASS = _secret("GMAIL_PASS", "izdq scag mtgy oulz")
-ADMIN_EMAIL= _secret("ADMIN_EMAIL","adminfs01@gmail.com")
-ADMIN_USER = _secret("ADMIN_USER", "admin")
-ADMIN_PASS = _secret("ADMIN_PASS", "FruitScanFR1728")
+def _get_db_url():
+    return _secret("DB_URL", "postgresql://postgres.isgumzwugaibqnqeevwd:016758.DAfe*@aws-1-sa-east-1.pooler.supabase.com:6543/postgres")
+
+def _get_gmail_user():
+    return _secret("GMAIL_USER", "adminfs01@gmail.com")
+
+def _get_gmail_pass():
+    return _secret("GMAIL_PASS", "izdq scag mtgy oulz")
+
+def _get_admin_email():
+    return _secret("ADMIN_EMAIL", "adminfs01@gmail.com")
+
+def _get_admin_user():
+    return _secret("ADMIN_USER", "admin")
+
+def _get_admin_pass():
+    return _secret("ADMIN_PASS", "FruitScanFR1728")
 
 # ── Roles disponibles ─────────────────────────────────────────────────────────
 ROLES = {
@@ -44,7 +58,7 @@ logger = logging.getLogger("fruitscan")
 
 # ── Utilidades ────────────────────────────────────────────────────────────────
 def get_db():
-    return psycopg2.connect(DB_URL, cursor_factory=RealDictCursor)
+    return psycopg2.connect(_get_db_url(), cursor_factory=RealDictCursor)
 
 def hash_password(password: str) -> str:
     """SHA-256 con salt embebido (compatible con registros existentes)."""
@@ -131,12 +145,12 @@ def init_db():
         """, (modelo,))
 
     # Admin por defecto
-    c.execute("SELECT id FROM usuarios WHERE email = %s", (ADMIN_EMAIL,))
+    c.execute("SELECT id FROM usuarios WHERE email = %s", (_get_admin_email(),))
     if not c.fetchone():
         c.execute("""
             INSERT INTO usuarios (username, email, password_hash, rol, verificado)
             VALUES (%s, %s, %s, 'admin', TRUE)
-        """, (ADMIN_USER, ADMIN_EMAIL, hash_password(ADMIN_PASS)))
+        """, (_get_admin_user(), _get_admin_email(), hash_password(_get_admin_pass())))
         logger.info("Usuario admin creado.")
 
     conn.commit()
@@ -180,7 +194,7 @@ def enviar_token(email: str, token: str) -> bool:
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = "FruitScan — Verifica tu cuenta"
-        msg["From"]    = GMAIL_USER
+        msg["From"]    = _get_gmail_user()
         msg["To"]      = email
         html = f"""
         <div style="font-family:sans-serif;max-width:480px;margin:0 auto;background:#111826;
@@ -205,8 +219,8 @@ def enviar_token(email: str, token: str) -> bool:
         </div>"""
         msg.attach(MIMEText(html, "html"))
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(GMAIL_USER, GMAIL_PASS)
-            server.sendmail(GMAIL_USER, email, msg.as_string())
+            server.login(_get_gmail_user(), _get_gmail_pass())
+            server.sendmail(_get_gmail_user(), email, msg.as_string())
         return True
     except Exception as e:
         logger.error(f"Error enviando correo a {email}: {e}")
