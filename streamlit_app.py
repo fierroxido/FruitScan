@@ -1,6 +1,5 @@
 import os
 import io
-import imghdr
 import streamlit as st
 import numpy as np
 import tensorflow as tf
@@ -118,8 +117,18 @@ os.makedirs(MODELOS_DIR, exist_ok=True)
 MAX_FILE_SIZE_MB  = 5
 TIPOS_PERMITIDOS  = {"jpeg", "png", "webp"}
 
+def _detectar_tipo(datos: bytes) -> str | None:
+    """Detecta el tipo de imagen por magic bytes, sin dependencias externas."""
+    if datos[:3] == b'\xff\xd8\xff':
+        return "jpeg"
+    if datos[:8] == b'\x89PNG\r\n\x1a\n':
+        return "png"
+    if datos[:4] in (b'RIFF',) and datos[8:12] == b'WEBP':
+        return "webp"
+    return None
+
 def validar_imagen(archivo) -> tuple[bool, str]:
-    """Valida tipo MIME real, tamaño y que sea una imagen legible."""
+    """Valida tipo real por magic bytes, tamaño e integridad con PIL."""
     datos = archivo.read()
     archivo.seek(0)
 
@@ -128,12 +137,12 @@ def validar_imagen(archivo) -> tuple[bool, str]:
     if size_mb > MAX_FILE_SIZE_MB:
         return False, f"La imagen supera el tamaño máximo de {MAX_FILE_SIZE_MB} MB ({size_mb:.1f} MB)."
 
-    # Tipo MIME real (no solo la extensión)
-    tipo_real = imghdr.what(None, h=datos)
+    # Tipo real por magic bytes
+    tipo_real = _detectar_tipo(datos)
     if tipo_real not in TIPOS_PERMITIDOS:
-        return False, f"Tipo de archivo no permitido. Sube una imagen JPG, PNG o WebP."
+        return False, "Tipo de archivo no permitido. Sube una imagen JPG, PNG o WebP."
 
-    # Integridad: que PIL pueda abrirla
+    # Integridad con PIL
     try:
         img = Image.open(io.BytesIO(datos))
         img.verify()
